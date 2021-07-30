@@ -10,6 +10,19 @@ This article outlines the structural equation modeling (SEM) approach to fixed a
 
 The repository contains the preprint version of the article along with supplementary materials and `R` code for replicating the examples. 
 
+## Contents 
+
+### article 
+
+Both the original Rmarkdown files and PDF versions of the main article (`random-fixed-effects-sem.Rmd`, `random-fixed-effects-sem.pdf`) as well as the supplementary materials (`supplementary-materials-random-fixed-effects-sem.Rmd`, `supplementary-materials-random-fixed-effects-sem.pdf`) of the author's version of the manuscript along with the references (`references2.bib`)
+
+### r-files 
+
+- Simulation code (`simulation-code.R`) for generating the wide and long datasets (`wideData.Rda`, `longData.Rda`)
+- Basic model syntax (`fe_sem.Rda`) and fitted `lavaan` model (`fe_sem.fit.Rda`)
+- Scripthooks for formatting the output (`scripthooks.R`, taken from stackoverflow --- see the file for credit)
+- Some other auxilery files 
+
 ## Contact 
 
 For questions and comments, please email me at: [henrik.andersen@soziologie.tu-chemnitz.de](henrik.andersen@soziologie.tu-chemnitz.de).
