@@ -1,0 +1,931 @@
+---
+title: |
+  | Supplementary materials for: 
+  | A closer look at random and fixed effects panel regression in structural equation modeling using \texttt{lavaan}
+author: |
+  | Henrik Kenneth Andersen
+  | 
+  | Chemnitz University of Technology 
+  | Institute of Sociology 
+  | henrik.andersen@soziologie.tu-chemnitz.de
+date: "30 July, 2021"
+bibliography      : "references2.bib"
+urlcolor          : blue
+link-citations    : yes
+floatsintext      : yes
+header-includes   : |
+  \usepackage{hyperref}
+  \usepackage[utf8]{inputenc}
+  \usepackage{booktabs}
+  \usepackage{bm}
+  \usepackage{mathtools}
+  \usepackage{amssymb}
+  \usepackage{amsmath}
+  \usepackage{tikz}
+  \usetikzlibrary{arrows}
+  \usepackage[nofiglist]{endfloat}
+  \usepackage{blkarray}
+  \usepackage{setspace}
+  \usepackage{etoolbox}
+  \DeclareMathOperator{\E}{\mathbb{E}}
+  \DeclareMathOperator{\Var}{\mathrm{Var}}
+  \DeclareMathOperator{\Cov}{\mathrm{Cov}}
+  \DeclareMathOperator{\var}{\mathrm{var}}
+  \DeclareMathOperator{\cov}{\mathrm{cov}}
+  \DeclareMathOperator{\Cor}{\mathrm{Cor}}
+  \DeclareMathOperator{\sd}{\mathrm{sd}}
+  \DeclareMathOperator*{\argmax}{arg\,max}
+  \DeclareMathOperator*{\argmin}{arg\,min}
+  \DeclareMathOperator*{\plim}{plim}
+  \DeclareMathOperator*{\rank}{rank}
+  \DeclareMathOperator*{\tr}{tr}
+  \mathtoolsset{showonlyrefs}
+  \BeforeBeginEnvironment{equation}{\begin{singlespace}\vspace*{-\baselineskip}}
+  \AfterEndEnvironment{equation}{\end{singlespace}\noindent\ignorespaces}
+  \BeforeBeginEnvironment{align}{\begin{singlespace}\vspace*{-\baselineskip}}
+  \AfterEndEnvironment{align}{\end{singlespace}\noindent\ignorespaces}
+  \def\tightlist{}
+  \pagenumbering{gobble}
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# Knitr options 
+knitr::opts_chunk$set(echo = TRUE)
+
+# Packages (some are repeated below, add them here as well just to be sure)
+library(formatR)
+library(knitr)
+library(lavaan)
+
+# Script hooks for chunk outputs
+source("../r-files/scripthooks.R")
+```
+
+```{r echo=FALSE}
+df <- readRDS("../r-files/longData.Rda")
+dfw <- readRDS("../r-files/wideData.Rda")
+
+n <- readRDS("../r-files/n.Rda")
+waves <- readRDS("../r-files/waves.Rda")
+
+fe_sem <- readRDS("../r-files/fe_sem.Rda")
+fe_sem.fit <- readRDS("../r-files/fe_sem.fit.Rda")
+```
+
+\pagenumbering{arabic}
+
+--- 
+
+Please cite the base text: 
+
+Andersen, H. K. (2021). A closer look at random and fixed effects panel regression in structural equation modeling using `lavaan`. *Structural Equation Modeling: A Multidisciplinary Journal* (forthcoming). [https://doi.org/10.1080/10705511.2021.1963255](https://doi.org/10.1080/10705511.2021.1963255)
+
+--- 
+
+The following discusses further topics related to (static) panel regression models in SEM and explores some extensions to the basic models. The first section discusses the [logic of RE and FE regression](#logic) in SEM in greater detail than the [base text](https://github.com/henrik-andersen/random-fixed-effects-sem/blob/main/article/random-fixed-effects-sem.pdf). The next section discusses the issues of [nonnormal](#normal) variables and possibilities for treating [missing data](#missing). Following that, it is illustrated that under ideal conditions, the SEM-based panel regression models produce the same results as [other methods](#compare), as implemented in the `plm` [@R-plm_a] and `lme4` [@Bates2015] packages for panel and multilevel models in `R`. Finally, the final section illustrates ways to extend the basic models: [relaxing assumptions](#relax) and accounting for [measurement error](#measerr) with latent variables.  
+
+# The logic of RE and FE regression in SEM {#logic}
+
+Let us begin with the RE model in SEM. The way it typically works is to convert the long-format data ($NT$ observations stacked on top of each other) into wide-format ($T$ individual columns of length $N$). We write $T$ equations: 
+\begin{align}
+y_{i1} = & \ \kappa_{y_{1}} + \beta x_{i1} + \gamma z_{i} +  \alpha_{i} + \nu_{i1}, \ i = 1, \ldots, N \\
+y_{i2} = & \ \kappa_{y_{2}} + \beta x_{i2} + \gamma z_{i} +  \alpha_{i} + \nu_{i2}, \ i = 1, \ldots, N \\
+ & \ \vdots \\
+y_{iT} = & \ \kappa_{y_{T}} + \beta x_{iT} + \gamma z_{i} +  \alpha_{i} + \nu_{iT}, \ i = 1, \ldots, N \label{eq:set-eqs} \\ 
+\end{align}
+where we have a single time-varying covariate, $x_{it}$, and a time-invariant covariate, $z_{i}$, along with the unobserved individual effect, $\alpha_{i}$, that captures the sum of all other time-invariant *unobserved* variables [@Bollen2010; @Wooldridge2002]. 
+
+For $x_{it}$ and $z_{i}$, we simply have 
+\begin{align}
+x_{i1} = &  \ \mu_{x_{1}} + \delta_{i1} \\
+x_{i2} = &  \ \mu_{x_{2}} + \delta_{i2} \\
+ & \ \vdots \\
+x_{iT} = &  \ \mu_{x_{T}} + \delta_{iT} \\
+z_{i} = &  \ \mu_{z} + \theta_{i} \label{eq:set-eqs-x}
+\end{align}
+where $\mu_{x_{t}} = \E(x_{it})$, $\mu_{z} = \E(z_{i})$, i.e., they are expressed by an unconditional mean and an individual deviation ($\delta_{it}$ and $\theta_{i}$) from the mean [@Bollen2004]. 
+
+The goal of SEM is to find estimates for the unknown parameters such that the differences between the observed mean vector, $\bar{\bm{o}}$, and covariance matrix, $\bm{S}$, and *model-implied* mean vector, $\bm{\mu}(\bm{\theta})$, and covariance matrix, $\bm{\Sigma}(\bm{\theta})$, are minimized [@Bollen1989, p. 1]. The vector $\bm{\theta}$ holds the unknown model parameters, including coefficients, error variances and the variances of the latent variables. 
+
+Before discussing the SEM further, let us look at a concrete example of a four-wave RE model. This is shown in Figure 1 in the base text. The sample mean vector and covariance matrix for this model simply consist of the sample means and (co)variances between the observed variables. If we call $\bm{y}_{i} = (y_{i1}, y_{i2}, y_{i3}, y_{i4})^{\intercal}$ and $\bm{w}_{i} = (x_{i1}, x_{i2}, x_{i3}, x_{i4}, z_{i})^{\intercal}$, then the observed mean vector and covariance matrix would be 
+\begin{align}
+\bar{\bm{o}} = 
+\begin{bmatrix}
+\bar{\bm{y}} \\
+\bar{\bm{w}}
+\end{bmatrix},  & \ 
+\bm{S} = 
+\begin{bmatrix}
+\var(\bm{y}) & \cov(\bm{y},\bm{w}) \\
+\cov(\bm{w},\bm{y}) & \var(\bm{w})
+\end{bmatrix}
+\end{align}
+where $\bar{\bm{y}}$ and $\bar{\bm{w}}$ are the observed means per timepoint, and in this case $\bm{S}$ is a $9 \times 9$ (four time-varying dependent variables, $\bm{y}_{i}$, four time-varying independent variables, $\bm{x}_{i}$, one time-invariant independent variable, $z_{i}$) and $\var(\cdot)$ and $\cov(\cdot)$ stand for the observed (co)variances.
+
+For the model-implied mean vector and covariance matrix, we collect the observed variables into a single vector, $\bm{y}_{i}^{*} = (y_{i1}, y_{i2}, y_{i3}, y_{i4}, x_{i1}, x_{i2}, x_{i3}, x_{i4}, z_{i})^{\intercal}$, the observed together with the latent variable into another, $\bm{\eta}_{i} = (y_{i1}, y_{i2}, y_{i3}, y_{i4}, x_{i1}, x_{i2}, x_{i3}, x_{i4}, z_{i}, \alpha_{i})^{\intercal}$, and write the model in matrix notation as 
+\begin{align}
+\bm{\eta}_{i} & = \bm{\kappa} + \bm{B}\bm{\eta}_{i} + \bm{\nu}_{i} \\
+\bm{y}_{i}^{*} & = \bm{\Lambda}\bm{\eta}_{i}
+\end{align}
+which we can write in reduced form as 
+\begin{align}
+\bm{\eta}_{i} & = (\bm{I} - \bm{B})^{-1}(\bm{\kappa} + \bm{\nu}_{i}) \\
+\bm{y}_{i}^{*} & = \bm{\Lambda}[(\bm{I} - \bm{B})^{-1}(\bm{\kappa} + \bm{\nu}_{i})]
+\end{align}
+where $\bm{I}$ is the identity matrix, $\bm{\kappa} = (\kappa_{y_{1}}, \kappa_{y_{2}}, \kappa_{y_{3}}, \kappa_{y_{4}}, \mu_{x_{1}}, \mu_{x_{2}}, \mu_{x_{3}}, \mu_{x_{4}}, \mu_{z}, 0)^{\intercal}$ is a vector of intercepts and unconditional means (with $\mu_{\alpha}$, the mean of the latent individual effects, fixed to zero for identification purposes) and $\bm{\nu}_{i} = (\nu_{i1}, \nu_{i2}, \nu_{i3}, \nu_{i4}, \delta_{i1}, \delta_{i2}, \delta_{i3}, \delta_{i4}, \theta_{i}, \alpha_{i})^{\intercal}$ is a vector of errors or rather individual deviations from the unconditional means.^[Note that $\mu_{\alpha} = 0$, so we do not decompose $\alpha_{i}$ into an unconditional mean and individual deviation.] $\bm{\Lambda}$ is a matrix of zeros and ones that just selects the observed variables so that the resulting model-implied mean vector and covariance matrix have the same dimensions as the observed counterparts and $\bm{B}$ is a matrix of coefficients:
+\begin{align}
+\bm{\Lambda} = \begin{bmatrix}
+1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 
+\end{bmatrix}, & \ 
+\bm{B} = \begin{bmatrix}
+0 & 0 & 0 & 0 & \beta & 0 & 0 & 0 & \gamma & 1 \\
+0 & 0 & 0 & 0 & 0 & \beta & 0 & 0 & \gamma & 1 \\
+0 & 0 & 0 & 0 & 0 & 0 & \beta & 0 & \gamma & 1 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & \beta & \gamma & 1 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 
+\end{bmatrix}.
+\end{align}
+This notation (suggested by @Graff1979 and discussed in @Bollen1989, p. 396) may not be the most intuitive (other notations are suggested, for example, in @Bollen2010) but it is the way the model is represented in `lavaan`. ^[Those interested can examine the matrix representation of the model using `lavInspect(mx.fit, what = "coef")`, where `mx.fit` is the fitted `lavaan` model.] If it seems confusing, keep in mind that this matrix notation is just another way of expressing the equations in \eqref{eq:set-eqs} and \eqref{eq:set-eqs-x}.
+
+From here, the model-implied mean vector is 
+\begin{align}
+\bm{\mu}(\bm{\theta}) & = \bm{\Lambda}\E(\bm{\eta}_{i}) \\
+ & = \bm{\Lambda}(\bm{\kappa} + \bm{B}\bm{\mu}_{\eta})
+\end{align}
+where $\bm{\mu}_{\eta}$ holds the expected values of the variables in $\bm{\eta}_{i}$. This results since $\E(\bm{\nu}_{i}) = \bm{0}$, by assumption, which is unproblematic with the inclusion of $\bm{\kappa}$. The model-implied covariance matrix, $\bm{\Sigma}(\bm{\theta})$, is 
+\begin{align}
+\bm{\Sigma}(\bm{\theta}) & = \E(\bm{y}_{i}^{*}\bm{y}_{i}^{* \intercal}) - \E(\bm{y}_{i}^{*})\E(\bm{y}_{i}^{*})^{\intercal} \\
+ & = \bm{\Lambda}(\bm{I} - \bm{B})^{-1}\bm{\Psi}(\bm{I} - \bm{B})^{-1 \intercal}\bm{\Lambda}^{\intercal} 
+\end{align}
+where $\bm{\Psi} = \E(\bm{\nu}_{i}\bm{\nu}_{i}^{\intercal})$ and which results if we retain the assumption $\E(\bm{\nu}_{i}) = \bm{0}$. 
+
+This is where the assumptions discussed regarding the conventional models in the base text come into play. The matrix $\bm{\Psi}$ is the covariance matrix of the errors, or rather the individual deviations from the unconditional means in the case of the exogenous variables. It looks like: 
+\begin{align}
+\bm{\Psi} & = \E
+\begin{bmatrix}
+\nu_{i1}^{2} & & & & & & & & & \\
+\nu_{i2}\nu_{i1} & \nu_{i2}^{2} & & & & & & & & \\
+\nu_{i3}\nu_{i1} & \nu_{i3}\nu_{i2} & \nu_{i3}^{2} & & & & & & & \\
+\nu_{i4}\nu_{i1} & \nu_{i4}\nu_{i2} & \nu_{i4}\nu_{i3} & \nu_{i4}^{2} & & & & & & \\
+\delta_{i1}\nu_{i1} & \delta_{i1}\nu_{i2} & \delta_{i1}\nu_{i3} & \delta_{i1}\nu_{i4} & \delta_{i1}^{2} & & & & & \\
+\delta_{i2}\nu_{i1} & \delta_{i2}\nu_{i2} & \delta_{i2}\nu_{i3} & \delta_{i2}\nu_{i4} & \delta_{i2}\delta_{i1} & \delta_{i2}^{2} & & & & \\
+\delta_{i3}\nu_{i1} & \delta_{i3}\nu_{i2} & \delta_{i3}\nu_{i3} & \delta_{i3}\nu_{i4} & \delta_{i3}\delta_{i1} & \delta_{i3}\delta_{i2} & \delta_{i3}^{2} & & & \\
+\delta_{i4}\nu_{i1} & \delta_{i4}\nu_{i2} & \delta_{i4}\nu_{i3} & \delta_{i4}\nu_{i4} & \delta_{i4}\delta_{i1} & \delta_{i4}\delta_{i2} & \delta_{i4}\delta_{i3} & \delta_{i4}^{2} & & \\
+\theta_{i} \nu_{i1} & \theta_{i} \nu_{i2} & \theta_{i} \nu_{i3} & \theta_{i} \nu_{i4} & \theta_{i} \delta_{i1} & \theta_{i} \delta_{i2} & \theta_{i} \delta_{i3} & \theta_{i} \delta_{i4} & \theta_{i}^{2} & \\
+\alpha_{i} \nu_{i1} & \alpha_{i} \nu_{i2} & \alpha_{i} \nu_{i3} & \alpha_{i} \nu_{i4} & \alpha_{i} \delta_{i1} & \alpha_{i} \delta_{i2} & \alpha_{i} \delta_{i3} & \alpha_{i} \delta_{i4} & \alpha_{i} \theta_{i} & \alpha_{i}^{2}.
+\end{bmatrix}
+\end{align}
+
+Some of the assumptions, like linearity and a lack of excessive multicollinearity, are straightforward and will be taken as a given. We will also assume homoskedasticity of the composite errors conditional on the model covariates. The errors will be assumed normally distributed for the sake of simplicity. The online section discusses some ways to address nonormal variables in SEM. 
+
+Let us turn to the remaining assumptions and discuss them in some detail. First, let us look at the assumption of strict exogeneity (i.e., zero conditional mean of the composite error), which can be stated in this case as $E(\nu_{it} | \bm{x}_{i}, z_{i}, \alpha_{i}) = 0$ and $\E(\alpha_{i} | \bm{x}_{i}, z_{i}) = 0$, where $\bm{x}_{i} = (x_{i1}, x_{i2}, x_{i3}, x_{i4})^{\intercal}$. In practical terms, strict exogeneity means that the idiosyncratic error, $\nu_{it}$, at each point in time is uncorrelated with the model covariates (including the individual effects) at all points in time. So too are the individual effects assumed uncorrelated with the model covariates at all points in time in the RE model. Since $x_{it} = \mu_{x_{t}} + \delta_{it}$ and $z_{i} = \mu_{z} + \theta_{i}$, we set $\E(\delta_{it}\nu_{is})$, $\E(\theta_{i}\nu_{it})$, $\E(\alpha_{i}\nu_{it})$ as well as $\E(\delta_{it}\alpha_{i})$ and $\E(\theta_{i}\alpha_{i})$ to zero for all $t$ and $s$.^[In fact, when it comes to the time-invariant covariate, we *must* fix the covariance between the individual effects and $z_{i}$ to zero, or else a perfect collinearity between the two will result, and the model will not be identified [@Bollen2010, p. 27].] Second, we saw in the covariance matrix of the composite errors that the source of dependency between observations on the same unit over time was the individual effect $\alpha_{i}$. After accounting for this, we do not expect any covariance between the idiosyncratic errors of the same unit over time. So, we can set $\E(\nu_{it}\nu_{is})$ to zero whenever $t \ne s$. Third, we mentioned that homoskedasticity in the panel regression setup can apply to the time dimension as well. If we believe the idiosyncratic error variance is constant over time, we can constrain the variance of $\nu_{it}$ so that a single variance is estimated for all four timepoints. We can reflect this assumption by removing the $t$ subscript from $\E(\nu_{it}^{2})$ and just write $\E(\nu_{i}^{2})$. Other than that, the models discussed so far place no assumptions on the relationships between the exogenous observed covariates, so we can allow these to covary freely. This results in the following specification of the $\bm{\Psi}$ matrix: 
+\begin{align}
+\bm{\Psi} & = \E
+\begin{bmatrix}
+\nu_{i}^{2} & & & & & & & & & \\
+0 & \nu_{i}^{2} & & & & & & & & \\
+0 & 0 & \nu_{i}^{2} & & & & & & & \\
+0 & 0 & 0 & \nu_{i}^{2} & & & & & & \\
+0 & 0 & 0 & 0 & \delta_{i1}^{2} & & & & & \\
+0 & 0 & 0 & 0 & \delta_{i2}\delta_{i1} & \delta_{i2}^{2} & & & & \\
+0 & 0 & 0 & 0 & \delta_{i3}\delta_{i1} & \delta_{i3}\delta_{i2} & \delta_{i3}^{2} & & & \\
+0 & 0 & 0 & 0 & \delta_{i4}\delta_{i1} & \delta_{i4}\delta_{i2} & \delta_{i4}\delta_{i3} & \delta_{i4}^{2} & & \\
+0 & 0 & 0 & 0 & \theta_{i} \delta_{i1} & \theta_{i} \delta_{i2} & \theta_{i} \delta_{i3} & \theta_{i} \delta_{i4} & \theta_{i}^{2} & \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & \alpha_{i}^{2} 
+\end{bmatrix}.
+\end{align}
+Once we have specified the model and applied the assumptions by placing constraints on the $\bm{B}$ and $\bm{\Psi}$ matrices, we can estimate it. The most widely used estimator is maximum likelihood, which involves minimizing the fitting function 
+\begin{align}
+F_{ML} & = \ln | \bm{\Sigma}(\bm{\theta}) | - \ln | \bm{S} | + \tr\big(\bm{\Sigma}^{-1}(\bm{\theta}) \bm{S} \big) - p + (\bar{\bm{o}} - \bm{\mu}(\bm{\theta}))^{\intercal}\bm{\Sigma}^{-1}(\bm{\theta})(\bar{\bm{o}} - \bm{\mu}(\bm{\theta}))
+\end{align}
+where $p$ is the number of observed variables, $\ln$ is the natural log, $|\cdot|$ is the determinant and $\tr$ is the trace [@Bollen2010, p. 32]. The estimates for $\bm{\theta}$ are chosen as those that minimize the fitting function, thereby also minimizing the differences between the observed and model-implied mean vectors and covariance matrices. 
+
+Recall that in SEM we model the individual effects explicitly as a latent variable. Equation \eqref{eq:set-eqs} from the RE setup pertains for the FE model as well. We relax the assumption of unrelated effects by allowing the individual effects, $\alpha_{i}$, to correlate with the time-varying model covariates. We do so by relaxing the assumptions in $\bm{\Psi}$ and allowing $\E(\alpha_{i}x_{it})$ to be freely estimated at each point in time, rather than fixing them to zero. The assumption of $\E(\alpha_{i}z_{i}) = 0$ must be retained for identification. 
+
+# Some notes on panel regression in SEM {#notes}
+
+Especially when one is switching from other statistical methods to SEM, some points of contention are bound to come up. In this section, we can briefly discuss and address two popular ones: nonnormality and missing data.
+
+## Nonnormal variables {#normal}
+
+Standard estimation of SEMs using the most common techniques such as maximum likelihood (ML) and generalized least squares (GLS) typically requires the assumption of multivariate normality along with the other common regression assumptions discussed in the [base text](https://github.com/henrik-andersen/random-fixed-effects-sem/blob/main/article/random-fixed-effects-sem.pdf). As the name suggests, ML estimation entails maximizing the likelihood of the observed variables given the model parameters. Getting the likelihood requires a knowing (or assuming) a well-defined probability density function. GLS, on the other hand, works by choosing a weight matrix (typically the inverse of the observed covariance matrix) to minimize the (weighted) squared differences between observed and model-implied matrices. In both cases, ML and GLS, the assumption of multivariate normality means the probability distributions of the observed variables can be completely summarized by those sample (co)variances (along with a vector of means, if the mean structure is to be examined as well). If the observed variables diverge from the normality assumption, then higher-order moments (skewness, kurtosis) would be needed to summarize the distributions [@West1995]. 
+
+It should be noted, however, that the normality assumption concerns the *error distribution* and thus usually only the endogenous, i.e., dependent variables [@Kline2015; @Centerstat] along with any latent exogenous variables (then the normality assumption concerns the observed indicators). 
+
+There are two main sources of nonnormality: nonnormal continuous variables and so-called coarsely categorized or simply ordered categorical variables [@West1995]. Nonnormal continuous variables are continuous variables characterized by skewness and/or kurtosis that deviate from that of the standard normal distribution. Coarsely categorized variables are those with underlying distributions that could be considered normal, but where observed measures are available as categorized data. Still other dependent variables may be dichotomous in nature, e.g., employed/unemployed or voted for party A/did not vote for party A. Even dichotomous variables, however, can sometimes be thought of as stemming from an unobserved continuous normal distribution [see @Best2015, p. 155]. 
+
+Nonnormal continuous variables are arguably the less problematic of the two. They can lead to a $\chi^{2}$ model fit test statistic that is too often significant when it should not be (incorrect rejection of the true model) and standard errors that tend to be too low, yielding too many significant parameter estimates [@West1995]. In `lavaan`, estimators like `MLM` (for complete data) and `MLR` (for complete and incomplete data) offer standard errors and $\chi^{2}$ test statistics that are robust to nonnormality, see the `lavaan` tutorial website (https://lavaan.ugent.be/tutorial/est.html) and the 'brief user's guide' (https://users.ugent.be/~yrosseel/lavaan/lavaan2.pdf). These estimators can be chosen by including the argument `estimator = ` in the `sem()` function, e.g., for `MLR`:
+
+```{r eval=FALSE, echo=TRUE}
+mx.fit <- sem(mx, data = df, estimator = "MLR")
+```
+
+Ordered categorical variables display lower correlations between variables than continuous counterparts [@West1995]. This leads to a type of attenuation bias where the estimated effects in ML-based models with categorical outcomes are lower than they should be. The amount of bias depends on how coarse the variable was categorized, so to speak. Generally, the fewer the categories, the weaker the observed correlations and thus the more downwards biased the parameter estimates will be (downwards in the sense of towards zero). The same that goes for nonnormal continuous variables in terms of $\chi^{2}$ tests of model fit and standard errors apply.  
+
+The solution to the problem of categorical (or even dichotomous) outcomes in SEM is to simply declare them as such. This depends on the software, but in `lavaan` it can be done using the shortcut `ordered = c("y1", "y2")` in the `sem()` function call, assuming there are two dependent variables are called `y1` and `y2` and they are ordered categorical. In the model syntax, the user can includes $M_{k} - 1$ thresholds (where $M_{k}$ is the number of categories for the $k$th variable) per categorical endogenous variable [@Rosseel2021]. For example, if each dependent variable were measured on a Likert style scale with five categories, four thresholds could be estimated (rather than means) using 
+
+```{r eval=FALSE, echo=TRUE}
+y1 | t1 + t2 + t3 + t4
+y2 | t1 + t2 + t3 + t4
+```
+
+where `t1`, `t2` etc. are used by convention to specify the thresholds [@Rosseel2020]. The `ordered` option turns on the diagonal weighted least squares (DWLS) estimator along with corrections for standard errors and test statistics. Many know this as the *weighted least squares means and variance adjusted* (WLSMV) 'estimator' in `Mplus`.^[Estimator is placed in quotations because it is somewhat of a misnomer. Turning on WLSMV in `Mplus` employs the DWLS estimator plus robust standard error and test statistics, see this post on the `lavaan` Google Groups forum: https://groups.google.com/g/lavaan/c/Nymu7jmVUk8.] Those who are familiar with the latent variable derivation of the logistic and probit regression model [see @Best2015] will be familiar with the logic of these estimators. Essentially, it is assumed that a normally distributed underlying variable is responsible for the crude measures on the categorical scale. Thresholds are calculated based on the proportion of responses per category, which are used to estimate the continuous latent variable distribution. In a `lavaan` model using the DWLS estimator, the estimated coefficients are those of a probit regression model, but can be interpreted as the linear effect of the covariate on the latent continuous underlying response variable, see also this post on the `lavaan` Google Groups forum: https://groups.google.com/g/lavaan/c/mG5Mjrf2jgo. 
+
+## Missing data {#missing}
+
+In most practical applications, missing data is an issue [@Allison2003]. Seldom do we have valid data on all model variables for all cases, especially when it comes to survey data where confusingly worded questions or social desirability concerns, for example, can cause respondents to skip questions.  
+
+In the context of panel studies, the issue of panel attrition also plays a role. Even if complete data is observed in one wave of data collection, it is not always the case that the same observational unit is available to take part in subsequent waves. 
+
+In SEM, like other methods, missing data treatments like listwise deletion, where units with missing values on any of the model variables are eliminated, are always available. However, notice that when we transform the panel dataset from long- to wide-format (as outlined in the [base text](https://github.com/henrik-andersen/random-fixed-effects-sem/blob/main/article/random-fixed-effects-sem.pdf)), the impact of listwise deletion is magnified. That is, for each unit in a long-format dataset, the timepoints are separate rows of data. If complete data for unit $i$ is available at time $t$ but data is incomplete for the same unit $i$ at time $s$, then at least one row of data is retained with listwise deletion. Once the data is in wide-format, there is only a single row per unit, with each timepoint in a separate column. In this setup, if data for unit $i$ is complete at time $t$ but incomplete at time $s$, then the observations for the unit *at all points in time* are lost through listwise deletion. Therefore listwise deletion in panel SEM is even less attractive than it is for conventional methods using stacked, long-format data. 
+
+Methods like listwise and pairwise (where means and co(variances) are estimated using the available pairwise data) are appropriate in some situations, ideally when the missing data is missing completely at random (MCAR, i.e., the probability of a missing value does not depend on other variables, observed or unobserved). However, there are a number of drawbacks to these methods, especially when the data is not MCAR but rather missing at random (MAR), where missingness is dependent on the unobserved missing data itself. For example, if the probability of a missing value on income is dependent on the respondent's income then the missing data is said to be MAR. For an overview of the situations in which listwise and pairwise deletion may be appropriate, and their drawbacks, see [@Allison2003; @Kline2016].
+
+Other methods like mean, single and multiple imputation have been introduced as an alternative to listwise and pairwise deletion, in which a value for the missing datum is estimated or 'imputed'. For example, for single or 'conditional' imputation, if data was missing on income, we could estimate a unit's income given their sex, age, job, etc., assuming those characteristics were available [@Allison2003; @Graham2015]. 
+
+All of these methods above are available in current SEM software [see for example @Allison2003; @Muthen2016]. However, arguably the preferred method for dealing with missing data in SEM is the Full Information Maximum Likelihood (FIML) method, sometimes referred to as 'direct ML' [@Allison2003; @Lei2015]. For each individual in the sample, an individual-specific vector of observed (i.e., minus the variables with missing values) is used: $\bm{x}_{i}$. FIML entails maximizing the likelihood of these individual-specific vectors $\bm{x}_{i}$ of values given an individual-specific mean vector $\bm{\mu}_{i}$ and covariance matrix $\bm{\Sigma}_{i}$: 
+\begin{align}
+\mathcal{L}(\bm{\mu},\bm{\Sigma}) & = \prod_{i=1}^{N}f(\bm{x}_{i} | \bm{\mu}_{i}, \bm{\Sigma}_{i})
+\end{align}
+where $f(\cdot)$ is the multivariate normal density function [@Allison2003]. To be more concrete, if $\bm{x} = (x_{1}, x_{2}, x_{3}, x_{4})^{\intercal}$ was the vector of four model variables, and $x_{2}$ and $x_{3}$ were missing for unit $i$, then $\bm{x}_{i} = (x_{1i}, x_{4i})^{\intercal}$, $\bm{\mu}_{i} = (\mu_{x1}, \mu_{x4})^{\intercal}$ and $\bm{\Sigma}_{i} = \begin{bmatrix} \Var(x_{1}) & \Cov(x_{1},x_{4}) & \\ \Cov(x_{4},x_{1}) & \Var(x_{4}) \end{bmatrix}$ where the (co)variances in $\bm{\Sigma}_{i}$ are the model-implied (co)variances based on the model parameters. 
+
+Loosely speaking, FIML requires that missingness is at least ignorable, i.e., MAR and the mechanism that governs the missing data should be distinct from the variables included in the model [@Allison2003]. FIML is straightforward in situations of continuous normally distributed variables but can be implemented for categorical data as well, see for example this discussion on the `Mplus` forum: http://www.statmodel.com/discussion/messages/23/11336.html?1602351808.  
+
+# A comparison with non-SEM methods {#compare}
+
+To summarize the previous section, there are numerous solutions available to a variety of issues and limitations to SEM panel regression. For nonnormal data, robust estimators and models akin to logistic and probit regressions are available and straightforward to implement in modern SEM software. Missing values can be dealt with in a number of ways and the FIML approach (though not without limitations, see @Graham2015) is currently seen by many as a state-of-the-art way to deal with missingness [@Lei2015]. 
+
+Under ideal conditions, panel SEM results line up with the more traditional (i.e., non-SEM) methods. As a demonstration, take the typical fixed effects model. We can use the [long-format data](https://github.com/henrik-andersen/random-fixed-effects-sem/tree/main/r-files) (file: `longData.Rda`) to run the typical FE model using the `plm` package [@R-plm_a] for panel regression. By default, the `plm` function assumes the dataframe is structured so that the first two columns correspond to the individual and time indices, see the documentation at https://cran.r-project.org/web/packages/plm/plm.pdf or @R-plm_a. 
+
+```{r message=FALSE, warning=FALSE, error=FALSE}
+library(plm)
+
+# Run the FE model in plm 
+fe1 <- plm(y ~ x, 
+           effect = "individual", model = "within", 
+           data = df)
+summary(fe1)
+```
+
+The FE-SEM in the [base text](https://github.com/henrik-andersen/random-fixed-effects-sem/blob/main/article/random-fixed-effects-sem.pdf) gave an estimated coefficient of $\hat{\beta}_{FE-SEM} = `r round(lavInspect(fe_sem.fit, "list")[5, 14], 3)` \ (`r round(lavInspect(fe_sem.fit, "list")[5, 15], 3)`)$. The results in the output above show that they are essentially identical with $\hat{\beta}_{FE} = `r round(summary(fe1)$coefficients[1, 1], 3)` \ (`r round(summary(fe1)$coefficients[1, 2], 3)`)$. Note it is not possible to include time-invariant covariates in the `plm` model because they get wiped out along with the individual effects in the demeaning. 
+
+Other methods of estimating FE models work in either the random or mixed effects model framework. For example, with dichotomous covariates, it may seem strange to demean them along with the rest of the equation, so instead we could include the cluster means per individual of the time-varying independent variables, here $x$, in the equation to achieve within estimates [@Mundlak1978; @Chamberlain1980; @Wooldridge2002]. 
+
+```{r}
+# Generate the cluster means for x per id 
+clusterMeanx <- aggregate(df$x, by = list(df$id), FUN = mean)
+# Rename the columns 
+names(clusterMeanx) <- c("id", "xbar")
+
+# Add the cluster means back into df  
+df <- merge(df, clusterMeanx, by = "id")
+```
+
+Here using the `plm` function in the `random` setup: 
+
+```{r}
+fe2 <- plm(y ~ x + xbar, 
+           effect = "individual", model = "random",
+           data = df)
+summary(fe2)
+```
+
+And here using the `lmer` function of the `lme4` package [@Bates2015] to estimate a mixed model: 
+
+```{r message=FALSE, error=FALSE, warning=FALSE}
+library(lme4)
+
+# Run the mixed model in lmer with the cluster means for x 
+mixed1 <- lmer(y ~ x + xbar + (1 | id), data = df)
+summary(mixed1)
+```
+
+In both cases, the models return the same estimates as the FE and FE-SEM models. Also, in both the `random` setup using the `plm` function, and the mixed model using the `lmer` function, we get estimates of the variance components, $\hat{\sigma}^{2}_{\alpha}$ and $\hat{\sigma}^{2}_{\nu}$: 
+
+```{r}
+# Print the variance components for the plm model  
+print(ercomp(fe2), 
+      digits = 3)
+
+# Print the variance components for the lmer model 
+print(VarCorr(mixed1), 
+      comp = c("Variance", "Std.Dev"), 
+      digits = 3)
+```
+
+From this we see both models report the same estimated variance components, $\hat{\sigma}^{2}_{\alpha} = `r round(ercomp(fe2)[[1]][2], 3)`$ and $\hat{\sigma}^{2}_{\nu} = `r round(ercomp(fe2)[[1]][1], 3)`$, telling us that about `r round(ercomp(fe2)[[1]][2]/(ercomp(fe2)[[1]][1] + ercomp(fe2)[[1]][2]), 3)*100`% of the residual variance is due to the differences between individuals (shown in the `share` column of the `ercomp()` output). This is what is referred to as the intraclass correlation coefficient, or ICC [@Hox2010]. 
+
+# Extensions {#exten}
+
+## Relaxing assumptions meant to mimic traditional FE models {#relax}
+
+There are a number of implicit assumptions attached to the typical FE model that can be relaxed in SEM. Some of these assumptions have been discussed already, and a fairly comprehenisve list of assumptions can be found in @Bollen2010. Here, I will go over just a few, concentrating on the implementation in `lavaan` and the opportunity to empirically test whether the adjustments are justified or not. 
+
+The assumptions we will discuss here pertain to the time-invariance of the effects of both the latent individual effects and the observed covariates, as well as a time-invariant error variance. 
+
+For example, we can rewrite the original FE equation as
+\begin{align}
+y_{it} & = \beta_{t}x_{it} + \gamma_{t}z_{i} + \lambda_{t}\alpha_{i} + \nu_{it}
+\end{align}
+where $\beta$ becomes $\beta_{t}$, $\gamma$ becomes $\gamma_{t}$ and the implicit regression weight of one turns to $\lambda_{t}$ to highlight the fact that the effect of $x$, $z$ as well as $\alpha$ on $y$ may vary over time. We can furthermore easily relax the assumption of time-constant error variance, i.e., $\sigma^{2}_{\nu_{t}}$. As noted in the [base text](https://github.com/henrik-andersen/random-fixed-effects-sem/blob/main/article/random-fixed-effects-sem.pdf), the assumption regarding the relatedness of the model covariate(s) and the individual effects determines whether we have an FE or RE model. We can set the correlations to zero and test whether the RE model would be preferable to the FE model. In general, if the individual effects are truly uncorrelated with the model covariates, it is advisable to switch to an RE model since because it uses up less degrees of freedom, it will have smaller standard errors [@Bollen2010]. 
+
+In the following `lavaan` code, we simply remove the factor loadings of one for the latent individual effect variable which allows them to be estimated freely at each timepoint. The first factor loading, however, is set to one by default for identification purposes. For the effect of the covariates, we can either delete the constraints `beta` in `yt ~ beta*xt` or give each regression a different label, e.g., `beta1`, `beta2`, `beta3`, etc. Similarly, to allow the error variance to vary over time, we turn the constraints `nu` into simple labels, i.e., `nu1`, `nu2`, `nu3`, etc., or again just delete them. In fact, regarding the error variances, they will be estimated necessarily, and do not need to be explicitly mentioned in the model syntax at all. Finally, to move from an FE to an RE model, we could simply constrain the correlations between the individual effects and the covariates to zero, i.e., `alpha ~~ 0*x1 + 0*x2 + 0*x3 + 0*x4 + 0*z`. The following model `fe_sem_fullyrelaxed` demonstrates a model in which all of the spoken of assumptions have been relaxed. 
+
+```{r}
+fe_sem_fullyrelaxed <- '
+# Define individual effects variable 
+alpha =~ y1 + y2 + y3 + y4
+# Regressions
+y1 ~ beta1*x1 + gamma1*z
+y2 ~ beta2*x2 + gamma2*z 
+y3 ~ beta3*x3 + gamma3*z
+y4 ~ beta4*x4 + gamma4*z
+# Allow unrestricted correlation between eta and covariates
+alpha ~~ x1 + x2 + x3 + x4 + 0*z
+# Alternatively: constrain all to 0 for RE model, or
+# just individual correlations
+# alpha ~~ 0*x1 + 0*x2 + 0*x3 + 0*x4 + 0*z
+x1 ~~ x2 + x3 + x4 + z
+x2 ~~ x3 + x4 + z
+x3 ~~ x4 + z
+x4 ~~ z
+# Constrain residual variances to be equal over time
+y1 ~~ nu1*y1
+y2 ~~ nu2*y2
+y3 ~~ nu3*y3
+y4 ~~ nu4*y4
+'
+fe_sem_fullyrelaxed.fit <- sem(model = fe_sem_fullyrelaxed, 
+                               meanstructure = TRUE, 
+                               data = dfw, 
+                               estimator = "ML")
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+re_sem <- '
+# Define individual effects variable 
+alpha =~ 1*y1 + 1*y2 + 1*y3 + 1*y4 
+# Regressions, constrain coefficient to be equal over time
+y1 ~ beta*x1 + gamma*z
+y2 ~ beta*x2 + gamma*z 
+y3 ~ beta*x3 + gamma*z
+y4 ~ beta*x4 + gamma*z
+# Correlations, individual effects do not covary with the covariate
+alpha ~~ 0*x1 + 0*x2 + 0*x3 + 0*x4 + 0*z   
+x1 ~~ x2 + x3 + x4 + z
+x2 ~~ x3 + x4 + z
+x3 ~~ x4 + z
+x4 ~~ z
+# Constrain residual variances to be equal over time
+y1 ~~ nu*y1
+y2 ~~ nu*y2
+y3 ~~ nu*y3
+y4 ~~ nu*y4
+'
+re_sem.fit <- sem(model = re_sem, 
+                  meanstructure = TRUE,
+                  data = dfw, 
+                  estimator = "ML")
+```
+
+As outlined in @Bollen2010, the researcher has the opportunity to test each of the assumptions empirically and decide whether a more parsimonious, i.e., restrictive model is justifiable. In this case, for each assumption, a likelihood ratio test can be carried out to determine whether the improvement to model fit resulting from the relaxation of various assumptions is significant or whether the more parsimonious model is preferable after all. 
+
+If we use the original model `fe_sem.fit` (from the [base text](https://github.com/henrik-andersen/random-fixed-effects-sem/blob/main/article/random-fixed-effects-sem.pdf)) as a starting point, the best strategy for testing these assumptions is to work in a stepwise fashion, relaxing one assumption at a time. We can begin by first constraining the correlation between $\alpha$ and $x_{t}$ to zero (`re_sem`) for an RE model. If turning from an FE to an RE model does not significantly worsen model fit, we can go forward with the rest of the steps with the RE model. If, however, the fit does worsen significantly, it is likely better to stick with the FE model; moving forward then with it to see if a less restrictive FE model is preferable. We can perform a likelihood ratio test in `R` using the `anova()` function:
+
+\small
+```{r}
+anova(fe_sem.fit, re_sem.fit)
+```
+\normalsize
+
+The table shows a comparison of the nested models, in descending order according to degrees of freedom. The RE model does not estimate the correlations between the individual effects and the covariates, so it is more parsimonious and thus listed at the bottom. The `Chisq` column shows the $\chi^{2}$ statistic for both models and the `Chisq diff` column calculates the difference between the two. Obviously, according to the simulated data generating process (DGP), the correlation between the individual effects and $x_{t}$ is not zero, so fixing these to zero leads to a substantial amount of misfit. The last column puts the $\chi^{2}$ difference in relation to the difference in degrees of freedom and gives a p-value for the probability that the difference is solely due to chance. Here, the change in $\chi^{2}$ is highly significant, so the FE model should be retained. 
+
+After now having established, based on the likelihood ratio test, that FE is our preferred model, we can begin relaxing the rest of the assumptions. I show the following merely as a demonstration of the procedure, we know already from the DGP that the parsimonious model as specified in `fe_sem.fit` is appropriate. We can next allow the error variances (`fe_semb.fit`), the effect of $x$ on $y$ (`fe_semc.fit`) and finally the factor loadings of the individual effects (`fe_semd.fit`) all to vary over time. 
+
+```{r echo=FALSE}
+fe_semb <- '
+# Define individual effects variable 
+alpha =~ 1*y1 + 1*y2 + 1*y3 + 1*y4
+# Regressions
+y1 ~ beta*x1 + gamma*z
+y2 ~ beta*x2 + gamma*z 
+y3 ~ beta*x3 + gamma*z
+y4 ~ beta*x4 + gamma*z
+# Allow unrestricted correlation between eta and covariates
+alpha ~~ x1 + x2 + x3 + x4 + 0*z
+# Alternatively: constrain all to 0 for RE model, or
+# just individual correlations
+# alpha ~~ 0*x1 + 0*x2 + 0*x3 + 0*x4 + 0*z
+x1 ~~ x2 + x3 + x4 + z
+x2 ~~ x3 + x4 + z
+x3 ~~ x4 + z
+x4 ~~ z
+# Constrain residual variances to be equal over time
+y1 ~~ nu1*y1
+y2 ~~ nu2*y2
+y3 ~~ nu3*y3
+y4 ~~ nu4*y4
+'
+fe_semb.fit <- sem(model = fe_semb, 
+                   meanstructure = TRUE, 
+                   data = dfw, 
+                   estimator = "ML")
+
+fe_semc <- '
+# Define individual effects variable 
+alpha =~ 1*y1 + 1*y2 + 1*y3 + 1*y4
+# Regressions
+y1 ~ beta1*x1 + gamma1*z
+y2 ~ beta2*x2 + gamma2*z 
+y3 ~ beta3*x3 + gamma3*z
+y4 ~ beta4*x4 + gamma4*z
+# Allow unrestricted correlation between eta and covariates
+alpha ~~ x1 + x2 + x3 + x4 + 0*z
+# Alternatively: constrain all to 0 for RE model, or
+# just individual correlations
+# alpha ~~ 0*x1 + 0*x2 + 0*x3 + 0*x4 + 0*z
+x1 ~~ x2 + x3 + x4 + z
+x2 ~~ x3 + x4 + z
+x3 ~~ x4 + z
+x4 ~~ z
+# Constrain residual variances to be equal over time
+y1 ~~ nu1*y1
+y2 ~~ nu2*y2
+y3 ~~ nu3*y3
+y4 ~~ nu4*y4
+'
+fe_semc.fit <- sem(model = fe_semc, 
+                   meanstructure = TRUE, 
+                   data = dfw, 
+                   estimator = "ML")
+
+fe_semd <- '
+# Define individual effects variable 
+alpha =~ y1 + y2 + y3 + y4
+# Regressions
+y1 ~ beta1*x1 + gamma1*z
+y2 ~ beta2*x2 + gamma2*z 
+y3 ~ beta3*x3 + gamma3*z
+y4 ~ beta4*x4 + gamma4*z
+# Allow unrestricted correlation between eta and covariates
+alpha ~~ x1 + x2 + x3 + x4 + 0*z
+# Alternatively: constrain all to 0 for RE model, or
+# just individual correlations
+# alpha ~~ 0*x1 + 0*x2 + 0*x3 + 0*x4 + 0*z
+x1 ~~ x2 + x3 + x4 + z
+x2 ~~ x3 + x4 + z
+x3 ~~ x4 + z
+x4 ~~ z
+# Constrain residual variances to be equal over time
+y1 ~~ nu1*y1
+y2 ~~ nu2*y2
+y3 ~~ nu3*y3
+y4 ~~ nu4*y4
+'
+fe_semd.fit <- sem(model = fe_semd, 
+                   meanstructure = TRUE, 
+                   data = dfw, 
+                   estimator = "ML")
+```
+
+\small
+```{r}
+anova(fe_sem.fit, fe_semb.fit, fe_semc.fit, fe_semd.fit)
+```
+\normalsize
+
+Keep in mind that a less parsimonious nested model (fewer degrees of freedom) will tend to fit the data better. I.e., even if, say, a population correlation was truly zero, chance variations due to sampling error mean that the observed correlation will tend not to equal zero exactly, so adding a constraint to a model will tend to worsen fit, at least minimally. The question here is whether the improvement to fit by loosening constraints is meaningful or not. In the table above, we should not expect any meaningful improvements moving from `fe_sem.fit` to `fe_semd.fit`. Here, using simulated data, we have the luxury of knowing that any significant differences in $\chi^{2}$ are due to chance. With real data, it is up to the researcher to apply their best judgment and decide whether the results are plausible or not. 
+
+## Measurement error {#measerr}
+
+What if the observed variables are not measured perfectly? Then what we observe, call them $\tilde{x}_{t}$ and $\tilde{y}_{t}$ are composites of the true score we are after, i.e., $x_{t}$ and $y_{t}$, plus an additive measurement error portion:
+\begin{align}
+\tilde{x}_{t} & = x_{t} + \upsilon_{t}, \\
+\tilde{y}_{t} & = y_{t} + \nu_{t}.
+\end{align}
+How does this affect our model? Well, first notice that measurement error in the dependent variable is typically less of a serious problem than measurement error in the independent variables. Let us assume mean-centered variables so that we can ignore the intercept, and consider the following simple bivariate equation:
+\begin{align}
+y & = \beta x + \varepsilon
+\end{align}
+if $y$ is measured imperfectly and what we observe is $\tilde{y} = y + \nu$, then we can rewrite the equation as: 
+\begin{align}
+(\tilde{y} - \nu) & = \beta x + \varepsilon \\
+\tilde{y} & = \beta x + \varepsilon + \nu.
+\end{align}
+The measurement error in $y$ just gets added to the regression error. As long as $\nu$ is uncorrelated with $x$, then the regression coefficient will be unbiased [@Pischke2007; @Wooldridge2009]. However, this will increase the error variance and thus make the estimates less precise. 
+
+We will look at the effect of measurement error in the dependent variable using an example shortly. For now though, let us be safe in the knowledge that the coefficient of interest is likely unbiased, and concentrate on the more serious problem of error in the independent variable. 
+
+The intuition behind the problem of measurement error in the independent variable(s) can be explained as follows. Take $\tilde{x} = x + \upsilon$ and substitute this into the equation for $y$: 
+\begin{align}
+y & = \beta x + \varepsilon \\
+ & = \beta(\tilde{x} - \upsilon) + \varepsilon \\
+ & = \beta\tilde{x} + (\varepsilon - \beta\upsilon).
+\end{align}
+Since $\tilde{x}$ is obviously correlated with $\upsilon$ (unless the variance of $\upsilon$ is so small so that the correlation is essentially negligible), then the composite error in this regression is also correlated with the independent variable and thus the estimated coefficient of $\beta$ will be biased. 
+
+### The consequences of measurement error 
+
+To demonstrate the effect of measurement error on the FE-SEM model, and then provide a strategy for dealing with measurement error in SEM, [the simulated dataset](https://github.com/henrik-andersen/random-fixed-effects-sem/tree/main/r-files) (file: `wideData.Rda`) generates multiple *indicators* of the time-varying independent and dependent variables that all measure the intended variable imprecisely. Let us drop the time-invariant covariate, $z_{i}$, for now for the sake of simplicity. Returning to our panel data, we have three indicators of each the independent and dependent variable, per timepoint:  
+\begin{align}
+\tilde{x}_{kt} & = x_{t} + \upsilon_{kt}, \\
+\tilde{y}_{kt} & = y_{t} + \nu_{kt}
+\end{align}
+where $k = 1, 2, 3$ and $t = 1, ..., T$. This is like repeatedly presenting a respondent with a multi-item scale designed to measure things like stress, depression, xenophobia, etc. over the course of a panel study. To create the observed indicators, a random amount of measurement error (ranging from $\{\sigma^{2}_{\upsilon_{k}}, \sigma^{2}_{\nu_{k}}\}\in \{1.0, 1.1, 1.2, 1.3, 1.4, 1.5\}$) was added to the true variables, see the [simulation code](https://github.com/henrik-andersen/random-fixed-effects-sem/tree/main/r-files) (file: `simulation-code.R`). 
+
+Let us first focus on the issue of imprecise measurements of the independent variable of interest and run the same FE-SEM model above, but this time we will use one of the measurement error sullied indicators, here $\tilde{x}_{1t}$, instead of the true independent variable, $x_{t}$. As for the naming conventions in the `R` code, `x11` stands for the first indicator ($k = 1$) at the first point in time ($t = 1$), whereas for example `x35` stands for the third indicator ($k = 3$) at the fifth point in time ($t = 5$). 
+
+```{r}
+fe_sem2 <- '
+# Define individual effects variable 
+alpha =~ 1*y1 + 1*y2 + 1*y3 + 1*y4 
+# Regressions, constrain coefficient to be equal over time
+# Now the imprecisely measured indicator tilde{x}_kt
+# instead of the true variable x_t
+y1 ~ beta*x11 
+y2 ~ beta*x12 
+y3 ~ beta*x13
+y4 ~ beta*x14
+# Allow unrestricted correlation between eta and covariates
+alpha ~~ x11 + x12 + x13 + x14 
+x11 ~~ x12 + x13 + x14 
+x12 ~~ x13 + x14 
+x13 ~~ x14 
+# Constrain residual variances to be equal over time
+y1 ~~ nu*y1
+y2 ~~ nu*y2
+y3 ~~ nu*y3
+y4 ~~ nu*y4
+'
+fe_sem2.fit <- sem(model = fe_sem2, 
+                   meanstructure = TRUE, 
+                   data = dfw, 
+                   estimator = "ML")
+```
+
+Now, for the sake of brevity, let us look just at the estimated coefficients for $\beta$. 
+
+```{r, echo=TRUE, output.lines=32:39}
+summary(fe_sem2.fit)
+```
+
+Obviously, the estimated coefficient $\hat{\beta} =$ `r round( lavInspect( fe_sem2.fit, "list")[ 6, 14], 3)` is substantially smaller than the true population coefficient of $\beta = 0.3$. And the discrepancy is not just due to sampling error. In fact, we can derive the bias we are observing here. 
+
+For a simple bivariate regression model, it is straightforward to quantify the bias due to measurement error. It will be 
+\begin{align}
+\Cov(y, \tilde{x}) & = \Cov[y \tilde{x}] \\
+ & = \Cov[(\beta\tilde{x} + \varepsilon)\tilde{x}] \\
+ & = \Cov[\beta\tilde{x}^{2} + \varepsilon \tilde{x}] \\
+ & = \beta \Var(\tilde{x}) \\
+\hat{\beta} & = \frac{\Cov(y, \tilde{x})}{\Var(\tilde{x})} \\
+ & = \frac{\Cov[(\beta x + \varepsilon)(x + \upsilon)]}{\Var[(x + \upsilon)^{2}]} \\
+ & = \frac{\Cov[\beta x^{2} + \beta x \upsilon + \varepsilon x + \varepsilon \upsilon]}{\Cov[x^{2} + 2 x \upsilon + \upsilon^{2}]} \\
+ & = \beta \frac{\Var(x)}{\Var(x) + \Var(\upsilon)}.
+\end{align}
+which results if we assume that $\Cov(x, \upsilon) = 0$, $\Cov(x, \varepsilon) = 0$, $\Cov(\tilde{x}, \varepsilon) = 0$ and $\Cov(\varepsilon, \upsilon) = 0$ [@Wooldridge2009]. However, the model we are interested is not a bivariate model, so what was the point of showing the this? For one, it points out that the bias will always move the estimated coefficient closer to 0, since $\Var(x) \le \Var(x) + \Var(\upsilon)$. This means positive effects will be biased downwards and negative effects biased upwards, always towards zero. This is why it is referred to as *attenuation bias*. Second, it will help to familiarize ourselves with this equation to better understand the one for the multivariate case. 
+
+Indeed, the magnitude of the bias in a multivariate model is somewhat more complex to derive, but it will be 
+\begin{align}
+\hat{\beta} & = \beta \frac{\Var(\theta)}{\Var(\theta) + \Var(\upsilon)}
+\end{align}
+where $\theta$ is just the residual of a regression in which the underlying theoretical variable is regressed on all other covariates. In this case, we need to regress $x_{t}$ on $\alpha$ for: $x_{t} = \tau + \phi\alpha + \theta_{t}$ where $\tau$ is the intercept, and $\phi$ is the regression coefficient and $\theta_{t}$ is the residual [@Wooldridge2009, p. 318--320].
+
+Normally it is not possible to reconstruct the bias since in cases where we have to rely on indicators, we would not have observed the underlying theoretical variable. Furthermore, in the case of a fixed-effects model, the covariates are the unobserved time-invariant characteristics. However, because we are working with simulated data, we have everything we need. Going back to the results above, we can get the residuals of $x_{t}$ by either running a regression and saving the residuals, or we could skip a step and get them directly using the 'residual maker' matrix [@Ruettenauer2020] which is $\bm{M} = \bm{I} - \bm{A}(\bm{A}^{\intercal}\bm{A})^{-1}\bm{A}^{\intercal}$ and $\bm{A} = (\bm{\iota}_{n}, \bm{\alpha})$ is the $n \times 2$ matrix of covariate(s) plus a constant.
+
+```{r}
+# Make the n x n identity matrix
+Id <- diag(n)
+
+# n x 2 matrix of covariates alpha
+A <- matrix(c(rep(1, n), dfw$a1), 
+             nrow = n, ncol = 2)
+
+# The residual maker matrix M = I - A(A'A)^-1 A'
+M <- Id - A %*% solve(t(A) %*% A) %*% t(A)
+
+# Save the residuals, t for 'theta'
+t <- M %*% dfw$x1
+
+# Re-run the FE model from above without z with the 'true' 
+# independent variable for the correct estimate for beta 
+fe_semx <- '
+# Define individual effects variable 
+alpha =~ 1*y1 + 1*y2 + 1*y3 + 1*y4 
+# Regressions, constrain coefficient to be equal over time
+# Now the imprecisely measured indicator tilde{x}_kt
+# instead of the true variable x_t
+y1 ~ beta*x1 
+y2 ~ beta*x2 
+y3 ~ beta*x3
+y4 ~ beta*x4
+# Allow unrestricted correlation between eta and covariates
+alpha ~~ x1 + x2 + x3 + x4 
+x11 ~~ x2 + x3 + x4 
+x12 ~~ x3 + x4 
+x13 ~~ x4 
+# Constrain residual variances to be equal over time
+y1 ~~ nu*y1
+y2 ~~ nu*y2
+y3 ~~ nu*y3
+y4 ~~ nu*y4
+'
+fe_semx.fit <- sem(model = fe_semx, 
+                   meanstructure = TRUE, 
+                   data = dfw, 
+                   estimator = "ML")
+
+# The equation for the biased beta 
+lavInspect(fe_semx.fit, "list")[6, 14]*
+  ((var(t))/(var(t) + var(dfw$x11 - dfw$x1)))
+```
+
+```{r, echo=FALSE, results=FALSE}
+b <- lavInspect(fe_semx.fit, "list")[6, 14]
+vart <- var(t)
+varu <- var(dfw$x11 - dfw$x1)
+```
+
+From this we can see that the biased estimate above of $\hat{\beta} =$ `r round(lavInspect(fe_sem2.fit, "list")[6, 14], 3)` roughly comes from $\beta \frac{\Var(\theta_{t})}{\Var(\theta_{t}) + \Var(\upsilon_{t})} = `r round(b, 3)` \frac{`r round(vart, 3)`}{`r round(vart + varu, 3)`}$ = `r round(b*((vart)/(vart + varu)), 3)`; 'roughly' because the equation here is the population equation. Due to sampling error, the estimates will tend vary slightly. 
+
+### Using latent variables to deal with measurement error 
+
+The way we deal with measurement error in SEM is surprisingly similar to the logic of fixed-effects regression. Namely, if we have multiple cross-sectional observations of the underlying construct of interest, then we can define a latent variable that represents the common variance across those multiple variables. Contrast this with the use of longitudinal repeated measures to isolate the common variance across time. 
+
+So, if we do in fact have multiple cross-sectional indicators for the underlying variables of interest, then we can partition them into an explained and unexplained portion:  
+\begin{align}
+x_{kt} & = \lambda_{kt}^{x}\xi_{t} + \delta_{kt}, \\
+y_{kt} & = \lambda_{kt}^{y}\eta_{t} + \epsilon_{kt},
+\end{align}
+where $x_{kt}$ and $y_{kt}$ are the $k^{th}$ indicators, $\xi_{t}$ and $\eta_{t}$ are latent factors representing the common variance across the cross-sectional repeated measures, and $\delta_{kt}$ and $\epsilon_{kt}$ are the unexplained portions of $x_{t}$ and $y_{t}$, respectively. The latent factors are linked to the observed indicators through the factor loadings $\lambda_{kt}$. 
+
+Thus, our FE regression equation changes from $y_{t} = \beta x_{t} + \alpha + \nu_{t}$ to:
+\begin{align}
+\eta_{t} & = \beta \xi_{t} + \alpha + \zeta_{t}
+\end{align}
+where $\zeta_{t}$ represents the disturbance, in other words the residual of the latent dependent variable $\eta_{t}$. The model is shown in Figure \ref{fig:fe-sem-meas-x}. For the sake of legibility, the measurement model portion is shown only for the first timepoint. 
+
+\begin{figure}
+\begin{center}
+\resizebox{0.75\textwidth}{!}{%
+\begin{tikzpicture}
+% Node styles ---
+\tikzstyle{man} = [rectangle, thick, minimum size = 0.5cm, draw = black!100, fill = white!100, font = \sffamily] 
+\tikzstyle{manmin} = [rectangle, draw = black!100, fill = white!100, font = \sffamily] 
+\tikzstyle{lat} = [circle, thick, minimum size = 0.5cm, draw = black!100, fill = white!100, font = \sffamily] 
+\tikzstyle{err} = [rectangle, minimum size = 0.5cm, draw = white!100, fill = white!100, font = \sffamily] 
+\tikzstyle{pha} = [rectangle, minimum size = 0.001cm, draw = white, fill = white]
+\tikzstyle{con} = [-latex, draw = black!100, font = \sffamily] 
+\tikzstyle{seqex} = [latex-latex, draw = black!100, font = \sffamily, dashed]
+\tikzstyle{cons} = [-latex, draw = black!100, font = \sffamily\small] 
+\tikzstyle{cor} = [latex-latex, font = \sffamily] 
+% Begin Figure ---
+% Nodes 
+\node at (+0.0,+0.0) [lat] (x1) {$\xi_{1}$};
+\node at (-1.0,-2.0) [manmin] (x11) {\tiny $x_{11}$};
+\node at (+0.0,-2.0) [manmin] (x21) {\tiny $x_{21}$};
+\node at (+1.0,-2.0) [manmin] (x31) {\tiny $x_{31}$};
+\node at (+2.0,-2.0) [manmin, draw = white!100] (dots) {...};
+\node at (+2.0,+0.0) [lat] (x2) {$\xi_{2}$};
+\node at (+6.0,+0.0) [lat] (x3) {$\xi_{3}$};
+\node at (+8.0,+0.0) [lat] (x4) {$\xi_{4}$};
+\node at (+4.0,+0.0) [lat] (alp) {$\alpha$};
+\node at (+0.0,+2.1) [man] (y1) {$y_{1}$};
+\node at (+2.0,+2.1) [man] (y2) {$y_{2}$};
+\node at (+6.0,+2.1) [man] (y3) {$y_{3}$};
+\node at (+8.0,+2.1) [man] (y4) {$y_{4}$};
+\node at (+0.0,+3.0) [err] (e1) {\footnotesize $\nu_{1}$};
+\node at (+2.0,+3.0) [err] (e2) {\footnotesize $\nu_{2}$};
+\node at (+6.0,+3.0) [err] (e3) {\footnotesize $\nu_{3}$};
+\node at (+8.0,+3.0) [err] (e4) {\footnotesize $\nu_{4}$};
+\node at (-1.0,-3.0) [err] (d11) {\tiny $\delta_{11}$};
+\node at (+0.0,-3.0) [err] (d21) {\tiny $\delta_{21}$};
+\node at (+1.0,-3.0) [err] (d31) {\tiny $\delta_{31}$};
+% Paths
+\path (alp) edge [con] node [near start, fill=white] {1} (y1);
+\path (alp) edge [con] node [midway, fill=white] {1} (y2);
+\path (alp) edge [con] node [midway, fill=white] {1} (y3);
+\path (alp) edge [con] node [near start, fill=white] {1} (y4);
+\path (x1) edge [con] node [near start, fill=white] {$\beta$} (y1);
+\path (x2) edge [con] node [near start, fill=white] {$\beta$} (y2);
+\path (x3) edge [con] node [near start, fill=white] {$\beta$} (y3);
+\path (x4) edge [con] node [near start, fill=white] {$\beta$} (y4);
+\path (e1) edge [con] node {} (y1);
+\path (e2) edge [con] node {} (y2);
+\path (e3) edge [con] node {} (y3);
+\path (e4) edge [con] node {} (y4);
+% correlations
+\path (x1) edge [cor, bend right] node {} (x2);
+\path (x1) edge [cor, bend right] node {} (alp);
+\path (x1) edge [cor, bend right] node {} (x3);
+\path (x1) edge [cor, bend right] node {} (x4);
+\path (x2) edge [cor, bend right] node {} (alp);
+\path (x2) edge [cor, bend right] node {} (x3);
+\path (x2) edge [cor, bend right] node {} (x4);
+\path (x3) edge [cor, bend right] node {} (x4);
+\path (x3) edge [cor, bend left] node {} (alp);
+\path (x4) edge [cor, bend left] node {} (alp); 
+\path (x1) edge [con] node [fill=white] {\tiny 1} (x11);
+\path (x1) edge [con, fill=white] node [fill=white] {\tiny $\lambda_{21}$} (x21);
+\path (x1) edge [con, fill=white] node [fill=white] {\tiny $\lambda_{31}$} (x31);
+\path (d11) edge [con] node {} (x11);
+\path (d21) edge [con] node {} (x21);
+\path (d31) edge [con] node {} (x31);
+\end{tikzpicture}
+}
+\caption{Four-wave FE model with measurement model for independent variable, shown only at $t = 1$ \label{fig:fe-sem-meas-x}}
+\end{center}
+\end{figure}
+
+First, however, let us double-check that measurement error in the dependent variable only increases the error variance (thus also increasing standard errors and reducing $R^{2}$), but does not systematically bias the coefficients of interest. The next model uses the indicators of $x$ and specifies latent variables ($\xi_{t}$, `xi` in the code) to represent the valid cross-sectional variance. The dependent variable in the model is one of the imprecisely measured indicators of $y$.   
+
+```{r}
+fe_sem3 <- '
+# Define individual effects variable 
+alpha =~ 1*y11 + 1*y12 + 1*y13 + 1*y14 
+# ----- MEASUREMENT MODEL FOR INDEPENDENT VARIABLE, xi 
+xi1 =~ 1*x11 + x21 + x31 
+xi2 =~ 1*x12 + x22 + x32
+xi3 =~ 1*x13 + x23 + x33
+xi4 =~ 1*x14 + x24 + x34
+# Regressions, constrain coefficient to be equal over time
+y11 ~ b*xi1
+y12 ~ b*xi2 
+y13 ~ b*xi3
+y14 ~ b*xi4
+# Allow unrestricted correlation between eta and covariates
+alpha ~~ xi1 + xi2 + xi3 + xi4 
+xi1 ~~ xi2 + xi3 + xi4 
+xi2 ~~ xi3 + xi4 
+xi3 ~~ xi4 
+# Constrain residual variances to be equal over time
+y11 ~~ nu*y11
+y12 ~~ nu*y12
+y13 ~~ nu*y13
+y14 ~~ nu*y14
+'
+fe_sem3.fit <- sem(model = fe_sem3, 
+                   meanstructure = TRUE, 
+                   data = dfw, 
+                   estimator = "ML")
+```
+
+```{r, output.lines=46:55}
+summary(fe_sem3.fit)
+```
+
+The estimated coefficient here in model `fe_sem3.fit` is $\hat{\beta}_{y_{1t},\xi_{t}} =$ `r round( lavInspect( fe_sem3.fit, "list")[ 17, 14], 3)` which is very close to the estimated coefficient in the first, correctly specified model `fe_sem.fit`, where $\hat{\beta}_{y_{t},x_{t}} =$ `r round( lavInspect( fe_sem.fit, "list")[ 5, 14], 3)`. Notice, however, that the standard error of the estimate is substantially larger, with `r round( lavInspect( fe_sem3.fit, "list")[ 17, 15], 3)` in `fe_sem3.fit` vs. `r round( lavInspect( fe_sem.fit, "list")[ 5, 15], 3)` in `fe_sem.fit` in which $y$ was measured without error. The explained variance ($R^{2}$) in the dependent variable was also much higher in the first model: 
+
+```{r}
+lavInspect(fe_sem.fit, "r2")[1:4]
+```
+
+compared to the current model: 
+
+```{r}
+lavInspect(fe_sem3.fit, "r2")[1:4]
+```
+
+Finally, to examine the effect of removing measurement error from the dependent variable in terms of standard errors and $R^{2}$ statistics, we can specify a model with latent variables representing the valid cross-sectional variance in $y$ (`eta` for $\eta$ in the code). The model is displayed in Figure \ref{fig:fe-sem-meas-y}, where again, for the sake of legibility, only the measurement models for the first timepoint are shown. 
+
+\begin{figure}
+\begin{center}
+\resizebox{0.75\textwidth}{!}{%
+\begin{tikzpicture}
+% Node styles ---
+\tikzstyle{man} = [rectangle, thick, minimum size = 0.5cm, draw = black!100, fill = white!100, font = \sffamily] 
+\tikzstyle{manmin} = [rectangle, draw = black!100, fill = white!100, font = \sffamily] 
+\tikzstyle{lat} = [circle, thick, minimum size = 0.5cm, draw = black!100, fill = white!100, font = \sffamily] 
+\tikzstyle{err} = [rectangle, minimum size = 0.5cm, draw = white!100, fill = white!100, font = \sffamily] 
+\tikzstyle{pha} = [rectangle, minimum size = 0.001cm, draw = white, fill = white]
+\tikzstyle{con} = [-latex, draw = black!100, font = \sffamily] 
+\tikzstyle{seqex} = [latex-latex, draw = black!100, font = \sffamily, dashed]
+\tikzstyle{cons} = [-latex, draw = black!100, font = \sffamily\small] 
+\tikzstyle{cor} = [latex-latex, font = \sffamily] 
+% Begin Figure ---
+% Nodes 
+\node at (+0.0,+0.0) [lat] (x1) {$\xi_{1}$};
+\node at (-1.0,-2.0) [manmin] (x11) {\tiny $x_{11}$};
+\node at (+0.0,-2.0) [manmin] (x21) {\tiny $x_{21}$};
+\node at (+1.0,-2.0) [manmin] (x31) {\tiny $x_{31}$};
+\node at (+2.0,-2.0) [manmin, draw = white!100] (dots) {...};
+\node at (+2.0,+0.0) [lat] (x2) {$\xi_{2}$};
+\node at (+6.0,+0.0) [lat] (x3) {$\xi_{3}$};
+\node at (+8.0,+0.0) [lat] (x4) {$\xi_{4}$};
+\node at (+4.0,+0.0) [lat] (alp) {$\alpha$};
+\node at (+0.0,+2.1) [lat] (y1) {$\eta_{1}$};
+\node at (-1.0,+4.1) [manmin] (y11) {\tiny $y_{11}$};
+\node at (+0.0,+4.1) [manmin] (y21) {\tiny $y_{21}$};
+\node at (+1.0,+4.1) [manmin] (y31) {\tiny $y_{31}$};
+\node at (+2.0,+4.1) [manmin, draw = white!100] (dots) {...};
+\node at (+2.0,+2.1) [lat] (y2) {$\eta_{2}$};
+\node at (+6.0,+2.1) [lat] (y3) {$\eta_{3}$};
+\node at (+8.0,+2.1) [lat] (y4) {$\eta_{4}$};
+\node at (+1.25,+3.0) [err] (e1) {\footnotesize $\zeta_{1}$};
+\node at (+3.25,+3.0) [err] (e2) {\footnotesize $\zeta_{2}$};
+\node at (+7.25,+3.0) [err] (e3) {\footnotesize $\zeta_{3}$};
+\node at (+9.25,+3.0) [err] (e4) {\footnotesize $\zeta_{4}$};
+\node at (-1.0,-3.0) [err] (d11) {\tiny $\delta_{11}$};
+\node at (+0.0,-3.0) [err] (d21) {\tiny $\delta_{21}$};
+\node at (+1.0,-3.0) [err] (d31) {\tiny $\delta_{31}$};
+\node at (-1.0,+5.1) [err] (e11) {\tiny $\epsilon_{11}$};
+\node at (+0.0,+5.1) [err] (e21) {\tiny $\epsilon_{21}$};
+\node at (+1.0,+5.1) [err] (e31) {\tiny $\epsilon_{31}$};
+% Paths
+\path (alp) edge [con] node [near start, fill=white] {1} (y1);
+\path (alp) edge [con] node [midway, fill=white] {1} (y2);
+\path (alp) edge [con] node [midway, fill=white] {1} (y3);
+\path (alp) edge [con] node [near start, fill=white] {1} (y4);
+\path (x1) edge [con] node [near start, fill=white] {$\beta$} (y1);
+\path (x2) edge [con] node [near start, fill=white] {$\beta$} (y2);
+\path (x3) edge [con] node [near start, fill=white] {$\beta$} (y3);
+\path (x4) edge [con] node [near start, fill=white] {$\beta$} (y4);
+\path (e1) edge [con] node {} (y1);
+\path (e2) edge [con] node {} (y2);
+\path (e3) edge [con] node {} (y3);
+\path (e4) edge [con] node {} (y4);
+% correlations
+\path (x1) edge [cor, bend right] node {} (x2);
+\path (x1) edge [cor, bend right] node {} (alp);
+\path (x1) edge [cor, bend right] node {} (x3);
+\path (x1) edge [cor, bend right] node {} (x4);
+\path (x2) edge [cor, bend right] node {} (alp);
+\path (x2) edge [cor, bend right] node {} (x3);
+\path (x2) edge [cor, bend right] node {} (x4);
+\path (x3) edge [cor, bend right] node {} (x4);
+\path (x3) edge [cor, bend left] node {} (alp);
+\path (x4) edge [cor, bend left] node {} (alp); 
+\path (x1) edge [con] node [fill=white] {\tiny 1} (x11);
+\path (x1) edge [con, fill=white] node [fill=white] {\tiny $\lambda^{x}_{21}$} (x21);
+\path (x1) edge [con, fill=white] node [fill=white] {\tiny $\lambda^{x}_{31}$} (x31);
+\path (y1) edge [con] node [fill=white] {\tiny 1} (y11);
+\path (y1) edge [con, fill=white] node [fill=white] {\tiny $\lambda^{y}_{21}$} (y21);
+\path (y1) edge [con, fill=white] node [fill=white] {\tiny $\lambda^{y}_{31}$} (y31);
+\path (d11) edge [con] node {} (x11);
+\path (d21) edge [con] node {} (x21);
+\path (d31) edge [con] node {} (x31);
+\path (e11) edge [con] node {} (y11);
+\path (e21) edge [con] node {} (y21);
+\path (e31) edge [con] node {} (y31);
+\end{tikzpicture}
+}
+\caption{Four-wave FE model with measurement model for both variables, shown only at $t = 1$ \label{fig:fe-sem-meas-y}}
+\end{center}
+\end{figure}
+
+```{r}
+fe_sem4 <- '
+# ----- NOW MEASUREMENT MODEL FOR DEPENDENT VARIABLE, n for eta
+eta1 =~ 1*y11 + y21 + y31
+eta2 =~ 1*y12 + y22 + y32
+eta3 =~ 1*y13 + y23 + y33
+eta4 =~ 1*y14 + y24 + y34
+# Define individual effects variable 
+alpha =~ 1*eta1 + 1*eta2 + 1*eta3 + 1*eta4 
+# Measurement model for independent variables, xi 
+xi1 =~ 1*x11 + x21 + x31 
+xi2 =~ 1*x12 + x22 + x32
+xi3 =~ 1*x13 + x23 + x33
+xi4 =~ 1*x14 + x24 + x34
+# Regressions, constrain coefficient to be equal over time
+eta1 ~ beta*xi1
+eta2 ~ beta*xi2 
+eta3 ~ beta*xi3
+eta4 ~ beta*xi4
+# Allow unrestricted correlation between eta and covariates
+alpha ~~ xi1 + xi2 + xi3 + xi4 
+xi1 ~~ xi2 + xi3 + xi4 
+xi2 ~~ xi3 + xi4 
+xi3 ~~ xi4 
+# Constrain residual variances to be equal over time
+eta1 ~~ nu*eta1
+eta2 ~~ nu*eta2
+eta3 ~~ nu*eta3
+eta4 ~~ nu*eta4
+'
+fe_sem4.fit <- sem(model = fe_sem4, 
+                   meanstructure = TRUE,
+                   data = dfw, 
+                   estimator = "ML")
+```
+
+```{r, output.lines=62:71}
+summary(fe_sem4.fit)
+```
+
+Here, the effect $\hat{\beta}_{\eta_{t},\xi_{t}}$ is again very close to the true effect of 0.3. Again, however, if the main goal of the model is to avoid bias, it may be advisable to just leave the manifest dependent variable as it is, and worry about measurement error in the independent variables. 
+
+# References 
